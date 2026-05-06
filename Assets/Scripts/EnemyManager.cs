@@ -9,6 +9,7 @@ public class EnemyManager : MonoBehaviour
     private List<int> enemyIndexes;
 
     [Header("Main AI Loop - Settings")]
+    public bool mainAIEnabled = true;
     private Coroutine AI_Loop_Coroutine;
 
     public int aliveEnemyCount;
@@ -24,7 +25,10 @@ public class EnemyManager : MonoBehaviour
             allEnemies[i].enemyAvailability = true;
         }
 
-        StartAI();
+        if (mainAIEnabled)
+        {
+            StartAI();
+        }
     }
 
     public void StartAI()
@@ -34,7 +38,7 @@ public class EnemyManager : MonoBehaviour
 
     IEnumerator AI_Loop(EnemyScript enemy)
     {
-        if (AliveEnemyCount() == 0)
+        if (AliveEnemyCount() == 0 || !mainAIEnabled)
         {
             StopCoroutine(AI_Loop(null));
             yield break;

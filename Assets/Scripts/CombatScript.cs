@@ -16,6 +16,7 @@ public class CombatScript : MonoBehaviour
     private EnemyScript lockedTarget;
 
     [Header("Combat Settings")]
+    [SerializeField] private bool inCombat = false;
     [SerializeField] private float attackCooldown;
 
     [Header("States")]
@@ -63,6 +64,12 @@ public class CombatScript : MonoBehaviour
         if (isAttackingEnemy)
             return;
 
+        if (enemyManager == null || enemyManager.AliveEnemyCount() == 0)
+        {
+            Attack(null, 0);
+            return;
+        }
+
         //Check to see if the detection behavior has an enemy set
         if (enemyDetection.CurrentTarget() == null)
         {
@@ -97,7 +104,7 @@ public class CombatScript : MonoBehaviour
         //Attack nothing in case target is null
         if (target == null)
         {
-            AttackType("GroundPunch", .2f, null, 0);
+            AttackType("GroundPunch", attackCooldown, null, 0);
             return;
         }
 
@@ -110,7 +117,7 @@ public class CombatScript : MonoBehaviour
         else
         {
             lockedTarget = null;
-            AttackType("GroundPunch", .2f, null, 0);
+            AttackType("GroundPunch", attackCooldown, null, 0);
         }
 
         //Change impulse
@@ -137,14 +144,17 @@ public class CombatScript : MonoBehaviour
 
         IEnumerator AttackCoroutine(float duration)
         {
-            movementInput.acceleration = 0;
             isAttackingEnemy = true;
-            movementInput.enabled = false;
+            if (target != null)
+            {
+                movementInput.acceleration = 0;
+                movementInput.enabled = false;
+            }
             yield return new WaitForSeconds(duration);
             isAttackingEnemy = false;
             yield return new WaitForSeconds(.2f);
             movementInput.enabled = true;
-            LerpCharacterAcceleration();
+            LerpCharacterAcceleration(target);
         }
 
         IEnumerator FinalBlowCoroutine()
@@ -227,6 +237,12 @@ public class CombatScript : MonoBehaviour
         if (lockedTarget == null || enemyManager.AliveEnemyCount() == 0)
             return;
 
+        if (enemyManager.mainAIEnabled == false)
+        {
+            enemyManager.mainAIEnabled = true;
+            enemyManager.StartAI();
+        }
+
         OnHit.Invoke(lockedTarget);
 
         //Polish
@@ -248,7 +264,7 @@ public class CombatScript : MonoBehaviour
             movementInput.enabled = false;
             yield return new WaitForSeconds(.5f);
             movementInput.enabled = true;
-            LerpCharacterAcceleration();
+            LerpCharacterAcceleration(null);
         }
     }
 
@@ -275,10 +291,13 @@ public class CombatScript : MonoBehaviour
 
     }
 
-    void LerpCharacterAcceleration()
+    void LerpCharacterAcceleration(EnemyScript target)
     {
-        movementInput.acceleration = 0;
-        DOVirtual.Float(0, 1, .6f, ((acceleration) => movementInput.acceleration = acceleration));
+        if (target != null)
+        {
+            movementInput.acceleration = 0;
+            DOVirtual.Float(0, 1, .6f, ((acceleration) => movementInput.acceleration = acceleration));
+        }
     }
 
     bool isLastHit()

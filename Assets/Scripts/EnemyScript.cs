@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using DG.Tweening;
+using System.Linq;
 
 public class EnemyScript : MonoBehaviour
 {
@@ -12,10 +13,17 @@ public class EnemyScript : MonoBehaviour
     private EnemyDetection enemyDetection;
     private CharacterController characterController;
 
+    [Header("Patrol")]
+    [SerializeField] private Transform[] waypoints;
+    private int _currentWaypointIndex = 0;
+    private int _direction = 1;
+    [SerializeField] private float waitTimeAtWaypoint = 2f;
+
     [Header("Stats")]
     public int health = 3;
-    private float moveSpeed = 1;
+    private float moveSpeed = 4f;
     private Vector3 moveDirection;
+    [SerializeField] private float stunDuration = 0.1f;
 
     [Header("States")]
     [SerializeField] private bool isPreparingAttack;
@@ -33,6 +41,7 @@ public class EnemyScript : MonoBehaviour
     [SerializeField] private AudioSource audioSource;
     [SerializeField] private AudioClip punchSound;
 
+    private Coroutine PatrolCoroutine;
     private Coroutine PrepareAttackCoroutine;
     private Coroutine RetreatCoroutine;
     private Coroutine DeathCoroutine;
@@ -59,7 +68,6 @@ public class EnemyScript : MonoBehaviour
         playerCombat.OnTrajectory.AddListener((x) => OnPlayerTrajectory(x));
 
         MovementCoroutine = StartCoroutine(EnemyMovement());
-
     }
 
     IEnumerator EnemyMovement()
@@ -87,11 +95,81 @@ public class EnemyScript : MonoBehaviour
 
     void Update()
     {
-        //Constantly look at player
-        transform.LookAt(new Vector3(playerCombat.transform.position.x, transform.position.y, playerCombat.transform.position.z));
+        if (!enemyManager.mainAIEnabled)
+        {
+            // Only start if it's not already running
+            if (PatrolCoroutine == null && waypoints.Length > 0)
+            {
+                PatrolCoroutine = StartCoroutine(PatrolRoutine());
+            }
+        }
+        else
+        {
+            // If AI is disabled (combat mode), stop the patrol
+            if (PatrolCoroutine != null)
+            {
+                StopCoroutine(PatrolCoroutine);
+                PatrolCoroutine = null;
+            }
 
-        //Only moves if the direction is set
-        MoveEnemy(moveDirection);
+            // Constantly look at player
+            transform.LookAt(new Vector3(playerCombat.transform.position.x, transform.position.y, playerCombat.transform.position.z));
+            MoveEnemy(moveDirection);
+        }
+    }
+
+    private IEnumerator PatrolRoutine()
+    {
+        while (true)
+        {
+            Transform target = waypoints[_currentWaypointIndex];
+
+            while (GetFlatDistance(transform.position, target.position) > 0.2f)
+            {
+                Vector3 direction = (target.position - transform.position);
+                Vector3 moveDir = new Vector3(direction.x, 0, direction.z).normalized;
+
+                animator.SetFloat("InputMagnitude", moveDir.magnitude, .2f, Time.deltaTime);
+                characterController.Move(moveDir * moveSpeed * Time.deltaTime);
+
+                if (moveDir != Vector3.zero)
+                {
+                    transform.forward = Vector3.Slerp(transform.forward, moveDir, 8f * Time.deltaTime);
+                }
+
+                yield return null;
+            }
+
+            animator.SetFloat("InputMagnitude", 0);
+            yield return new WaitForSeconds(waitTimeAtWaypoint);
+
+            // --- PING-PONG LOGIC ---
+
+            // If we are at the last waypoint, start going backwards
+            if (_currentWaypointIndex >= waypoints.Length - 1)
+            {
+                _direction = -1;
+            }
+            // If we reached the first waypoint again, start going forwards
+            else if (_currentWaypointIndex <= 0)
+            {
+                _direction = 1;
+            }
+
+            _currentWaypointIndex += _direction;
+
+            // Safety check to keep index within bounds
+            _currentWaypointIndex = Mathf.Clamp(_currentWaypointIndex, 0, waypoints.Length - 1);
+
+            Debug.Log("Moving to waypoint " + _currentWaypointIndex);
+        }
+    }
+
+    private float GetFlatDistance(Vector3 a, Vector3 b)
+    {
+        Vector2 aFlat = new Vector2(a.x, a.z);
+        Vector2 bFlat = new Vector2(b.x, b.z);
+        return Vector2.Distance(aFlat, bFlat);
     }
 
     //Listened event from Player Animation
@@ -115,7 +193,7 @@ public class EnemyScript : MonoBehaviour
             }
 
             animator.SetTrigger("Hit");
-            Vector3 knockbackTarget = transform.position - (transform.forward / 2);
+            Vector3 knockbackTarget = transform.position - (transform.forward * 0.6f);
             DOVirtual.Float(0, 1, .3f, (v) =>
             {
                 if (characterController.enabled)
@@ -131,7 +209,7 @@ public class EnemyScript : MonoBehaviour
         IEnumerator HitCoroutine()
         {
             isStunned = true;
-            yield return new WaitForSeconds(.5f);
+            yield return new WaitForSeconds(stunDuration);
             isStunned = false;
         }
     }
@@ -231,12 +309,12 @@ public class EnemyScript : MonoBehaviour
     void MoveEnemy(Vector3 direction)
     {
         //Set movespeed based on direction
-        moveSpeed = 2;
+        moveSpeed = 2f;
 
         if (direction == Vector3.forward)
-            moveSpeed = 8;
+            moveSpeed = 8f;
         if (direction == -Vector3.forward)
-            moveSpeed = 4;
+            moveSpeed = 4f;
 
         //Set Animator values
         animator.SetFloat("InputMagnitude", (characterController.velocity.normalized.magnitude * direction.z) / (5 / moveSpeed), .2f, Time.deltaTime);
