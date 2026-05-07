@@ -11,6 +11,7 @@ public class CombatScript : MonoBehaviour
     private PlayerController movementInput;
     private Animator animator;
     private CinemachineImpulseSource impulseSource;
+    private PlayerStats playerStats;
 
     [Header("Target")]
     private EnemyScript lockedTarget;
@@ -56,6 +57,23 @@ public class CombatScript : MonoBehaviour
         movementInput = GetComponent<PlayerController>();
         impulseSource = GetComponentInChildren<CinemachineImpulseSource>();
         audioSource = GetComponent<AudioSource>();
+        playerStats = GetComponent<PlayerStats>();
+    }
+
+    private void Update()
+    {
+        // Failsafe: if stuck attacking with no valid target, unstuck the player
+        if (isAttackingEnemy && (lockedTarget == null || !lockedTarget.isActiveAndEnabled))
+        {
+            UnstuckPlayer();
+        }
+    }
+
+    void UnstuckPlayer()
+    {
+        isAttackingEnemy = false;
+        movementInput.enabled = true;
+        movementInput.acceleration = 1f;
     }
 
     //This function gets called whenever the player inputs the punch action
@@ -70,27 +88,19 @@ public class CombatScript : MonoBehaviour
             return;
         }
 
-        //Check to see if the detection behavior has an enemy set
-        if (enemyDetection.CurrentTarget() == null)
-        {
-            if (enemyManager.AliveEnemyCount() == 0)
-            {
-                Attack(null, 0);
-                return;
-            }
-            else
-            {
-                lockedTarget = enemyManager.RandomEnemy();
-            }
-        }
+        // Prioritize the currently detected target
+        lockedTarget = enemyDetection.CurrentTarget();
 
-        //If the player is moving the movement input, use the "directional" detection to determine the enemy
+        // If player is moving with input, use directional detection
         if (enemyDetection.InputMagnitude() > .2f)
             lockedTarget = enemyDetection.CurrentTarget();
 
-        //Extra check to see if the locked target was set
+        // If no target detected, don't attack
         if (lockedTarget == null)
-            lockedTarget = enemyManager.RandomEnemy();
+        {
+            Attack(null, 0);
+            return;
+        }
 
         //AttackTarget
         Attack(lockedTarget, TargetDistance(lockedTarget));
@@ -255,6 +265,8 @@ public class CombatScript : MonoBehaviour
     {
         animator.SetTrigger("Hit");
 
+        playerStats.ModifyHealth(-10);
+
         if (damageCoroutine != null)
             StopCoroutine(damageCoroutine);
         damageCoroutine = StartCoroutine(DamageCoroutine());
@@ -322,4 +334,16 @@ public class CombatScript : MonoBehaviour
 
     #endregion
 
+    private void OnDrawGizmos()
+    {
+        // Draw line from player to locked target (RED) — what we're attacking
+        if (lockedTarget != null)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawLine(transform.position, lockedTarget.transform.position);
+            Gizmos.DrawSphere(lockedTarget.transform.position, 0.3f);
+        }
+    }
+
 }
+

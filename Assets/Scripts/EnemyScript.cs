@@ -12,6 +12,7 @@ public class EnemyScript : MonoBehaviour
     private EnemyManager enemyManager;
     private EnemyDetection enemyDetection;
     private CharacterController characterController;
+    private PlayerStats playerStats;
 
     [Header("Patrol")]
     [SerializeField] private Transform[] waypoints;
@@ -61,7 +62,12 @@ public class EnemyScript : MonoBehaviour
         characterController = GetComponent<CharacterController>();
 
         playerCombat = FindFirstObjectByType<CombatScript>();
-        enemyDetection = playerCombat.GetComponentInChildren<EnemyDetection>();
+        if (playerCombat != null)
+        {
+            enemyDetection = playerCombat.GetComponentInChildren<EnemyDetection>();
+        }
+
+        playerStats = playerCombat.GetComponentInParent<PlayerStats>();
 
         playerCombat.OnHit.AddListener((x) => OnPlayerHit(x));
         playerCombat.OnCounterAttack.AddListener((x) => OnPlayerCounter(x));
@@ -112,6 +118,11 @@ public class EnemyScript : MonoBehaviour
                 PatrolCoroutine = null;
             }
 
+            if (playerStats.IsDead)
+            {
+                StopMoving();
+            }
+
             // Constantly look at player
             transform.LookAt(new Vector3(playerCombat.transform.position.x, transform.position.y, playerCombat.transform.position.z));
             MoveEnemy(moveDirection);
@@ -160,8 +171,6 @@ public class EnemyScript : MonoBehaviour
 
             // Safety check to keep index within bounds
             _currentWaypointIndex = Mathf.Clamp(_currentWaypointIndex, 0, waypoints.Length - 1);
-
-            Debug.Log("Moving to waypoint " + _currentWaypointIndex);
         }
     }
 

@@ -21,13 +21,13 @@ public class PlayerController : MonoBehaviour
     [SerializeField] float runBlendSpeed = 8f;
 
     [Header("Settings")]
-    [SerializeField] float maxStamina = 5f;
     [SerializeField] float staminaDrainRate = 1f;
     [SerializeField] float staminaRegenRate = 0.5f;
-    [SerializeField] float stamina = 0f;
     [SerializeField] float startStaminaToRun = 2.0f;
     [SerializeField] float stopStaminaToRun = 0.1f;
     private bool exhausted;
+    // reference to central stats (stores current/max stamina values)
+    private PlayerStats playerStats;
     [SerializeField] float walkSpeed;
     [SerializeField] float runSpeed;
     [SerializeField] float rotationSpeed = 0.1f;
@@ -47,9 +47,17 @@ public class PlayerController : MonoBehaviour
         cam = Camera.main;
         controller = this.GetComponent<CharacterController>();
 
+        playerStats = GetComponent<PlayerStats>();
+        if (playerStats == null)
+        {
+            Debug.LogWarning("PlayerStats component not found on player. Adding one.");
+            playerStats = this.gameObject.AddComponent<PlayerStats>();
+        }
+
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        stamina = maxStamina;
+        // Ensure stamina starts at max (previously: stamina = maxStamina)
+        playerStats.RestoreToMaxStamina();
     }
 
     void Update()
@@ -58,9 +66,9 @@ public class PlayerController : MonoBehaviour
         // Determine running permission with hysteresis so start/stop thresholds differ
         bool desiredRunning;
         if (isRunning)
-            desiredRunning = sprintInputPressed && !exhausted && stamina > stopStaminaToRun;
+            desiredRunning = sprintInputPressed && !exhausted && playerStats.CurrentStamina > stopStaminaToRun;
         else
-            desiredRunning = sprintInputPressed && !exhausted && stamina > startStaminaToRun;
+            desiredRunning = sprintInputPressed && !exhausted && playerStats.CurrentStamina > startStaminaToRun;
 
         isRunning = desiredRunning;
 
@@ -95,28 +103,26 @@ public class PlayerController : MonoBehaviour
         InputMagnitude();
 
         // Drain or regenerate stamina
+        // Drain or regenerate stamina using PlayerStats
         if (isRunning && currentInputMagnitude > 0.1f)
         {
-            stamina -= staminaDrainRate * Time.deltaTime;
+            playerStats.ModifyStamina(-staminaDrainRate * Time.deltaTime);
         }
         else
         {
-            stamina += staminaRegenRate * Time.deltaTime;
+            playerStats.ModifyStamina(staminaRegenRate * Time.deltaTime);
         }
 
-        stamina = Mathf.Clamp(stamina, 0f, maxStamina);
-
         // When stamina depletes, mark exhausted and disallow running until recovered above threshold
-        if (stamina <= 0f)
+        if (playerStats.CurrentStamina <= 0f)
         {
-            stamina = 0f;
             exhausted = true;
             isRunning = false;
             runBlend = 0f;
         }
 
         // Recover from exhausted state only when stamina reaches the minimum to start running
-        if (exhausted && stamina >= startStaminaToRun)
+        if (exhausted && playerStats.CurrentStamina >= startStaminaToRun)
         {
             exhausted = false;
         }
